@@ -1,0 +1,321 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>Trivia</title>
+  <script src="scripts/lodash/lodash.js"></script>
+  <script src="scripts/jspsych.js"></script>
+  <script src="scripts/plugins/plugin-instructions.js"></script>
+  <script src="scripts/plugins/plugin-survey-multi-select.js"></script>
+  <script src="scripts/plugins/plugin-survey-multi-choice.js"></script>
+  <script src="scripts/plugins/plugin-survey-text.js"></script>
+  <script src="scripts/plugins/customs/survey-dropdown.js"></script>
+  <script src="expt_script/instructions_demog.js"></script>
+  <script src="expt_script/countries_languages.js"></script>
+  <script src="expt_script/trivia_stimuli.js"></script>
+  <link href="css/jspsych.css" type="text/css" rel="stylesheet"></link>
+  <link href="css/experiment.css" rel="stylesheet" type="text/css"></link>
+</head>
+
+<body>
+  <script>
+    function shuffle(array) {
+      return _.shuffle(array);
+    }
+
+    function get_prev_answer(key) {
+      return jsPsych.data.get().last(1).values()[0].response[key];
+    }
+
+    // DataPipe experiment ID (https://pipe.jspsych.org), saves to Zenodo
+    var DATAPIPE_EXPERIMENT_ID = "q6PmtjsI45vQ";
+
+    /* initialize jsPsych */
+    var jsPsych = initJsPsych({
+      show_progress_bar: true,
+      auto_update_progress_bar: true,
+      on_finish: function(){
+        fetch("https://pipe.jspsych.org/api/data/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "*/*",
+          },
+          body: JSON.stringify({
+            experimentID: DATAPIPE_EXPERIMENT_ID,
+            filename: `${subject_id}.json`,
+            data: JSON.stringify(jsPsych.data.get()),
+          }),
+        })
+        .then(response => {
+          if (response.ok) {
+            alert("Thank you for completing the study! Please DON'T close this message and inform the researcher.");
+          } else {
+            alert("Failed to submit data. Please inform the researcher.");
+          }
+        })
+        .catch(error => {
+          console.error("Error submitting data:", error);
+        });
+      }
+    });
+
+    /* create timeline */
+    var timeline = [];
+
+    var subject_id = "";
+
+    ////////////////////////////////////////////////////////////////////////
+    ///////////////////// PID //////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////
+
+    var pid_enter = {
+      type: jsPsychSurveyText,
+      questions: [
+        {
+          prompt: "Researcher: Enter PID:",
+          name: "pid",
+          rows: 1,
+          required: true
+        }
+      ],
+      data: {
+        phase: "pid"
+      },
+      on_finish: function(data) {
+        subject_id = data.response["pid"];
+        jsPsych.data.addProperties({subject_id: data.response["pid"]});
+      }
+    }
+
+    timeline.push(pid_enter);
+
+    ////////////////////////////////////////////////////////////////////////
+    ///////////////////// CONSENT FORM AND INSTRUCTIONS ////////////////////
+    ////////////////////////////////////////////////////////////////////////
+
+    var instructions = {
+      type: jsPsychInstructions,
+      pages: [
+        first_page_instruction,
+        consent_form],
+      show_clickable_nav: true,
+      allow_backward: true,
+      data: {
+        phase: "consent"
+      },
+      on_start: function () {
+        // set progress bar to 0 at the start of experiment
+        jsPsych.setProgressBar(0);
+      }
+    };
+
+    timeline.push(instructions);
+
+    ////////////////////////////////////////////////////////////////////////
+    ///////////////////// TRIVIA ///////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////
+
+    // one block per theme; block order and question order within each block are randomized
+    var trivia_blocks = shuffle(trivia_stimuli).map(function (block, block_index) {
+      var block_intro = {
+        type: jsPsychInstructions,
+        pages: [trivia_block_instr(block.theme)],
+        show_clickable_nav: true,
+        allow_backward: false,
+        data: {
+          phase: "trivia_intro",
+          theme: block.theme,
+          block_order: block_index + 1
+        }
+      };
+
+      var block_questions = shuffle(block.questions).map(function (question, question_index) {
+        return {
+          type: jsPsychSurveyText,
+          questions: [
+            {
+              prompt: question,
+              name: "trivia_answer",
+              required: true
+            }
+          ],
+          data: {
+            phase: "trivia",
+            theme: block.theme,
+            block_order: block_index + 1,
+            question_order: question_index + 1,
+            question: question
+          }
+        };
+      });
+
+      return {
+        timeline: [block_intro].concat(block_questions)
+      };
+    });
+
+    timeline.push(...trivia_blocks);
+
+    ////////////////////////////////////////////////////////////////////////
+    ///////////////////// demog Qs start from here /////////////////////////
+    ////////////////////////////////////////////////////////////////////////
+
+    // intro page
+    var demog_intro = {
+      type: jsPsychInstructions,
+      pages: demog_instr,
+      show_clickable_nav: true,
+      allow_backward: false
+    }
+
+    timeline.push(demog_intro);
+
+    var demog_language_first = {
+      type: jsPsychSurveyMultiChoice,
+      preamble: demog_require_answer,
+      questions: [
+        {
+          prompt: demog_language_first_instr,
+          name: 'demog_language_first',
+          options: demog_language_first_opts,
+          required: true,
+        },
+      ],
+      data: {
+        demog_question: "demog_language_first"
+      },
+    };
+
+    var demog_language_others = {
+      type: SurveyDropdown,
+      preamble: demog_require_answer,
+      questions: [
+        {
+          prompt: demog_language_others_instr,
+          name: 'demog_language_others',
+          options: languageList.map(language => language.name_en),
+        },
+      ],
+      data: {
+        demog_question: 'demog_language_others'
+      },
+    }
+
+    var demog_language_others_fluency = {
+      type: SurveyDropdown,
+      preamble: demog_require_answer,
+      questions: [
+        {
+          prompt: function () {
+            return demog_language_others_fluency_sp + get_prev_answer('demog_language_others');
+          },
+          name: 'demog_language_others_fluency_sp',
+          options: demog_language_others_fluency_opts,
+          required: true,
+        },
+        {
+          prompt: function () {
+            return demog_language_others_fluency_ud + get_prev_answer('demog_language_others');
+          },
+          name: 'demog_language_others_fluency_ud',
+          options: demog_language_others_fluency_opts,
+          required: true,
+        }
+      ],
+      data: {
+        demog_question: 'demog_language_others_fluency',
+      }
+    }
+
+    var demog_language_others_fluency_conditional_node = {
+      timeline: [demog_language_others_fluency],
+      conditional_function: function () {
+        return (get_prev_answer("demog_language_others") != "");
+      }
+    }
+
+    var demog_language_others_loop = {
+      timeline: [demog_language_others, demog_language_others_fluency_conditional_node],
+      loop_function: function (data) {
+        // keep looping while the participant enters another language
+        return (get_prev_answer("demog_language_others") != "");
+      }
+    }
+
+    var demog_age_gender = {
+      type: SurveyDropdown,
+      preamble: demog_require_answer,
+      questions: [
+        {
+          prompt: demog_age_instr,
+          name: 'demog_age',
+          options: demog_age_opts,
+          required: true,
+        },
+        {
+          prompt: demog_gender_instr,
+          name: 'demog_gender',
+          options: demog_gender_opts,
+          required: true,
+        },
+      ],
+      data: {
+        demog_question: 'demog_age_gender',
+      }
+    }
+
+    var demog_ethnic = {
+      type: jsPsychSurveyMultiSelect,
+      preamble: demog_require_answer,
+      questions: [
+        {
+          prompt: demog_ethnic_instr,
+          options: demog_ethnic_opts,
+          name: 'demog_ethnic'
+        },
+      ],
+      data: {
+        demog_question: 'demog_ethnic',
+      }
+    };
+
+    var demog_final_feedback = {
+      type: jsPsychSurveyText,
+      preamble: demog_require_answer,
+      questions: [
+        {
+          prompt: demog_final_feedback_instr,
+          name: "demog_final_feedback",
+          rows: 5
+        }
+      ],
+      data: {
+        demog_question: "demog_final_feedback"
+      }
+    }
+
+    var demog_qs = [
+      demog_language_first,
+      demog_language_others_loop,
+      demog_age_gender,
+      demog_ethnic,
+      demog_final_feedback,
+    ];
+
+    demog_qs.map(function (demog_q) {
+      if (!demog_q.data) {
+        demog_q.data = {}
+      }
+      demog_q.data.phase = "demog";
+      timeline.push(demog_q);
+    })
+
+    /* start the experiment */
+    jsPsych.run(timeline);
+
+  </script>
+</body>
+
+</html>
