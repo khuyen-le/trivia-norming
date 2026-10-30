@@ -6,7 +6,8 @@ trivia_theme_labels = {
   "Fairy Tales": "fairy tales",
   "Cartoons": "cartoons",
   "Superheroes": "superheroes",
-  "Geography": "geography"
+  "Geography": "geography",
+  "Math": "math"
 }
 
 function trivia_block_instr(theme) {

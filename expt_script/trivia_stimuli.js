@@ -71,5 +71,17 @@ const trivia_stimuli = [
       "Which country has the most people living in it?",
       "What is the capital of the United States?"
     ]
+  },
+  {
+    "theme": "Math",
+    "questions": [
+      "How many sides does a triangle have?",
+      "What shape has four equal sides?",
+      "How many minutes are in an hour?",
+      "How many sides does a hexagon have?",
+      "How many faces does a cube have?",
+      "What number comes after 99?",
+      "How many months are in a year?"
+    ]
   }
 ];
